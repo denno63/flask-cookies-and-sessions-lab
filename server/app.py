@@ -15,6 +15,26 @@ migrate = Migrate(app, db)
 
 db.init_app(app)
 
+with app.app_context():
+    db.create_all()
+
+    if Article.query.count() == 0:
+        default_user = User(name='Test User')
+        db.session.add(default_user)
+
+        for i in range(1, 5):
+            article = Article(
+                author=f'Author {i}',
+                title=f'Test Article {i}',
+                content=f'This is test content for article {i}.',
+                preview=f'This is test content for article {i}.',
+                minutes_to_read=1,
+                user=default_user,
+            )
+            db.session.add(article)
+
+        db.session.commit()
+
 @app.route('/clear')
 def clear_session():
     session['page_views'] = 0
@@ -23,11 +43,20 @@ def clear_session():
 @app.route('/articles')
 def index_articles():
     articles = [ArticleSchema().dump(a) for a in Article.query.all()]
-    return make_response(articles)
+    return jsonify(articles), 200
 
 @app.route('/articles/<int:id>')
 def show_article(id):
-    pass
+    # Initialize the page view count for a new session
+    session['page_views'] = session.get('page_views', 0) + 1
+
+    # Enforce a maximum of three article views per session
+    if session['page_views'] > 3:
+        return jsonify({'message': 'Maximum pageview limit reached'}), 401
+
+    article = Article.query.get_or_404(id)
+    article_data = ArticleSchema().dump(article)
+    return jsonify(article_data), 200
 
 
 if __name__ == '__main__':
